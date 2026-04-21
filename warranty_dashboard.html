@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Warranty Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
+      --muted: #57606a; --accent: #0969da; --good: #1a7f37;
+      /* Darkened from Ripe Mango (#FDB925) for legibility on white; Raisin #231F20 is primary body */
+      --warn: #6a4f0a;
+      --bad: #cf222e; --orange: #bc4c00;
+      --input-bg: #ffffff; --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); line-height:1.45; }
+    header { padding:1.25rem 1.5rem; border-bottom:1px solid var(--border); background:#ffffff; }
+    header h1 { margin:0 0 .35rem; font-size:1.5rem; font-weight:600; }
+    header p  { margin:0; color:var(--muted); font-size:.9rem; }
+    header code { background:#eff1f3; color:#0550ae; padding:.12em .4em; border-radius:4px; font-size:.88em; }
+    .wrap { max-width:1440px; margin:0 auto; padding:1rem 1.25rem 2rem; }
+    .banner { display:none; padding:.75rem 1rem; background:#ffebe9; border:1px solid #ff818266; border-radius:8px; margin-bottom:1rem; color:#82071e; }
+    .banner.show { display:block; }
+    .filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.75rem 1rem; padding:1rem; background:var(--panel); border:1px solid var(--border); border-radius:10px; margin-bottom:1.25rem; }
+    .filters label { display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:.35rem; }
+    .filters select[multiple] { min-height:110px; }
+    select,input[type="month"],input[type="search"],button { font:inherit; color:var(--text); background:var(--input-bg); border:1px solid var(--border); border-radius:6px; padding:.45rem .55rem; width:100%; }
+    button { cursor:pointer; background:var(--accent); border-color:#0550ae; color:#fff; font-weight:600; margin-top:1.4rem; }
+    button.secondary { background:#eaeef2; border-color:var(--border); color:var(--text); }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.75rem; margin-bottom:1.25rem; }
+    .kpi { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+    .kpi .label { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .kpi .value { font-size:1.65rem; font-weight:700; margin-top:.25rem; }
+    .kpi .sub   { font-size:.78rem; color:var(--muted); margin-top:.15rem; }
+    .kpi.good .value { color:var(--good); } .kpi.warn .value { color:var(--warn); } .kpi.bad .value { color:var(--bad); }
+    .charts { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.25rem; }
+    .charts .chart-box.full-width { grid-column:1/-1; }
+    @media(max-width:960px){ .charts{grid-template-columns:1fr;} }
+    .chart-box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:.75rem 1rem 1rem; }
+    .chart-box h3 { margin:0 0 .5rem; font-size:.95rem; font-weight:600; color:var(--muted); }
+    /* Firehouse Subs brand accents (monthly chart) — Jasper #E03A3E, Ripe Mango #FDB925, Raisin #231F20 */
+    .chart-box.fhs-chart { border-left:4px solid #E03A3E; box-shadow:inset 0 0 0 1px rgba(253,185,37,.2); background:#fff; }
+    .chart-box.fhs-chart h3 { color:#231F20; letter-spacing:.02em; }
+    .chart-wrap { position:relative; height:280px; }
+    h2.section { font-size:1.05rem; margin:1.5rem 0 .6rem; color:var(--text); }
+    .table-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--panel); margin-bottom:1.25rem; }
+    table.data { width:100%; border-collapse:collapse; font-size:.88rem; }
+    table.data th, table.data td { padding:.55rem .65rem; text-align:left; border-bottom:1px solid var(--border); }
+    table.data th { background:#f6f8fa; color:var(--muted); font-weight:600; cursor:pointer; user-select:none; white-space:nowrap; border-bottom:1px solid var(--border); }
+    table.data th:hover { color:var(--text); }
+    table.data tr:last-child td { border-bottom:none; }
+    table.data tr.warn-row  { background:#fff8c5; }
+    table.data tr.bad-row   { background:#ffebe9; }
+    table.data td.rate-warn { background:#fff8c5; }
+    table.data td.rate-bad  { background:#ffebe9; }
+    table.data tr.sub td    { background:#eff1f3; font-size:.82rem; color:var(--muted); }
+    .pill { display:inline-block; padding:.15rem .45rem; border-radius:4px; font-size:.75rem; font-weight:600; }
+    .pill.up { background:#ffebe9; color:#a40e26; }
+    .pill.flat { background:#eaeef2; color:var(--muted); }
+    .pill.down { background:#dafbe1; color:#116329; }
+    .pill.incomplete { background:#ddf4ff; color:#0550ae; }
+    .claims-search { margin-bottom:.5rem; max-width:360px; }
+    .row-firstyear { background:#ddf4ff; }
+    .meta-foot { margin-top:1rem; font-size:.8rem; color:var(--muted); }
+    .expand-hint { font-size:.75rem; color:var(--muted); margin-top:.25rem; }
+    .annual-year { font-weight:700; color:var(--accent); }
+    table.data td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    table.data th.num { text-align:right; }
+    #tblMonthlyRates thead th.month-col { font-size:.72rem; white-space:nowrap; line-height:1.2; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Warranty Dashboard</h1>
+    <p>Date filters apply to claim <b>issue date</b>. A claim is &ldquo;first-year&rdquo; if its issue date is within 365 days of the unit's <b>shipping date</b> (cross-referenced from sales data). Run <code>python process_data.py</code> after updating Excel files.</p>
+  </header>
+  <div class="wrap">
+    <div id="errBanner" class="banner"></div>
+    <div class="filters">
+      <div><label for="fltMfr">Manufacturer</label><select id="fltMfr" multiple></select></div>
+      <div><label for="fltModel">Model</label><select id="fltModel" multiple></select></div>
+      <div><label for="fltRegion">Region</label><select id="fltRegion" multiple></select></div>
+      <div><label for="fltStart">Issue date from</label><input type="month" id="fltStart" /></div>
+      <div><label for="fltEnd">Issue date to</label><input type="month" id="fltEnd" /></div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="button" id="btnApply">Apply filters</button>
+        <button type="button" class="secondary" id="btnReset">Reset to defaults</button>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="charts">
+      <div class="chart-box full-width fhs-chart">
+        <h3>Monthly failure rate by issue month (first-year claims in month / eligible units)</h3>
+        <div class="chart-wrap"><canvas id="chartMonthlyFail"></canvas></div>
+      </div>
+    </div>
+
+    <h2 class="section">Equipment summary (selected period)</h2>
+    <p class="expand-hint">Sorted by failure rate (high to low). Yellow highlight when failure rate is at least 6%; red when at least 10%. Click a row for top issues.</p>
+    <div class="table-scroll">
+      <table class="data" id="tblEquip">
+        <thead><tr>
+          <th data-sort="model">Model</th>
+          <th data-sort="manufacturerFolder">Mfr</th>
+          <th data-sort="eligible" class="num">Eligible units</th>
+          <th data-sort="claims" class="num">1st-yr claims</th>
+          <th data-sort="annualizedFailRate" class="num">Annualized failure rate</th>
+          <th data-sort="failRate" class="num">Failure rate in time range</th>
+          <th data-sort="warRate" class="num">Warranty rate in time range</th>
+          <th data-sort="topIssue">Top issue</th>
+        </tr></thead>
+        <tbody id="tblEquipBody"></tbody>
+      </table>
+    </div>
+
+    <h2 class="section">Monthly failure rate by equipment (selected period)</h2>
+    <p class="expand-hint">Each cell: first-year claims in that issue month &divide; eligible units for that model in that month (same basis as the chart). Row order matches the equipment summary sort. Cells: yellow at 1%+, red at 2%+.</p>
+    <div class="table-scroll">
+      <table class="data" id="tblMonthlyRates">
+        <thead id="tblMonthlyRatesHead"></thead>
+        <tbody id="tblMonthlyRatesBody"></tbody>
+      </table>
+    </div>
+
+    <h2 class="section" style="display:inline-block;margin-right:.75rem;">Annual equipment breakdown</h2>
+    <select id="annualYear" style="width:auto;display:inline-block;vertical-align:middle;margin-bottom:.4rem;"></select>
+    <p class="expand-hint">One row per model for the selected calendar year. Sorted by failure rate (high to low). Same row colors: yellow at 6%+, red at 10%+.</p>
+    <div class="table-scroll">
+      <table class="data" id="tblAnnual">
+        <thead><tr>
+          <th data-sort="model">Model</th>
+          <th data-sort="manufacturerFolder">Mfr</th>
+          <th data-sort="eligible" class="num">Eligible units</th>
+          <th data-sort="claims" class="num">1st-yr claims</th>
+          <th data-sort="uniqueSerials" class="num">Unique units w/ claim</th>
+          <th data-sort="failRate" class="num">Failure rate</th>
+          <th data-sort="warRate" class="num">Warranty rate</th>
+          <th data-sort="topIssue">Top issue</th>
+        </tr></thead>
+        <tbody id="tblAnnualBody"></tbody>
+      </table>
+    </div>
+
+    <h2 class="section">Claims detail</h2>
+    <input class="claims-search" type="search" id="claimSearch" placeholder="Search serial, model, issue, part…" />
+    <div class="table-scroll">
+      <table class="data" id="tblClaims">
+        <thead><tr>
+          <th data-sort="serialNumber">Serial</th>
+          <th data-sort="model">Model</th>
+          <th data-sort="manufacturerFolder">Mfr</th>
+          <th data-sort="region">Region</th>
+          <th data-sort="shippingDate">Ship date</th>
+          <th data-sort="issueDate">Issue date</th>
+          <th data-sort="days" class="num">Days to issue</th>
+          <th data-sort="firstYear">1st yr</th>
+          <th>Issue</th>
+          <th>Part replaced</th>
+        </tr></thead>
+        <tbody id="tblClaimsBody"></tbody>
+      </table>
+    </div>
+    <p class="meta-foot" id="metaFoot"></p>
+  </div>
+
+  <script src="./dashboard_data.js"></script>
+  <script>
+(function () {
+  "use strict";
+  var MS_DAY = 86400000, FY = 365;
+
+  /* ── date helpers ─────────────────────────────────────────── */
+  function parseYMD(s) {
+    if (!s) return null;
+    var p = String(s).split("T")[0].split("-").map(Number);
+    if (p.length < 3 || p.some(isNaN)) return null;
+    var d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function iso(d) { return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : null; }
+  function addDays(s, n) { var d = parseYMD(s); if (!d) return null; d.setUTCDate(d.getUTCDate() + n); return iso(d); }
+  function firstOfM(ym) { var p = ym.split("-").map(Number); return p[0] + "-" + String(p[1]).padStart(2, "0") + "-01"; }
+  function lastOfM(ym)  { var p = ym.split("-").map(Number); return iso(new Date(Date.UTC(p[0], p[1], 0))); }
+  function normS(s) { return String(s || "").trim().toUpperCase(); }
+  function lk(r)    { return r.manufacturerFolder + "|" + r.model + "|" + normS(r.serialNumber); }
+  function isFY(ship, issue) { return ship && issue && issue >= ship && issue <= addDays(ship, FY); }
+  function daysBetween(a, b) { var x = parseYMD(a), y = parseYMD(b); return x && y ? Math.round((y - x) / MS_DAY) : null; }
+  function monthKeys(a, b) {
+    var out = []; if (!a || !b) return out;
+    var p = a.split("-").map(Number), e = b.split("-").map(Number), y = p[0], m = p[1];
+    while (y < e[0] || (y === e[0] && m <= e[1])) { out.push(y + "-" + String(m).padStart(2, "0")); m++; if (m > 12) { m = 1; y++; } }
+    return out;
+  }
+  function formatIssueMonth(ym) {
+    var p = ym.split("-").map(Number);
+    if (p.length < 2 || p.some(isNaN)) return ym;
+    return new Date(Date.UTC(p[0], p[1] - 1, 1)).toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+  }
+
+  /* ── state ────────────────────────────────────────────────── */
+  var S = {
+    sales: [], claims: [], shipMap: null, dataAsOf: "",
+    charts: {},
+    equipSort:   { key: "failRate", dir: -1 },
+    annualSort:  { key: "failRate", dir: -1 },
+    claimsSort:  { key: "issueDate", dir: -1 },
+    expandedModel: null, claimRows: [],
+  };
+
+  /* ── filter helpers ───────────────────────────────────────── */
+  function selVals(el) { return Array.from(el.selectedOptions).map(function (o) { return o.value; }); }
+  function getF() {
+    return {
+      mfrs: selVals(document.getElementById("fltMfr")),
+      models: selVals(document.getElementById("fltModel")),
+      regions: selVals(document.getElementById("fltRegion")),
+      start: document.getElementById("fltStart").value,
+      end: document.getElementById("fltEnd").value,
+    };
+  }
+  function fltClaims(claims, f) {
+    var lo = f.start ? firstOfM(f.start) : null;
+    var hi = f.end   ? lastOfM(f.end) : null;
+    return claims.filter(function (c) {
+      if (f.mfrs.length   && f.mfrs.indexOf(c.manufacturerFolder) === -1) return false;
+      if (f.models.length && f.models.indexOf(c.model) === -1) return false;
+      if (f.regions.length && f.regions.indexOf(c.region) === -1) return false;
+      if (lo && c.issueDate < lo) return false;
+      if (hi && c.issueDate > hi) return false;
+      return true;
+    });
+  }
+  function fltSales(sales, f) {
+    return sales.filter(function (s) {
+      if (f.mfrs.length   && f.mfrs.indexOf(s.manufacturerFolder) === -1) return false;
+      if (f.models.length && f.models.indexOf(s.model) === -1) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Eligible units: shipped such that their first-year window
+   * [shipDate, shipDate+365] overlaps [windowStart, windowEnd].
+   *   shipDate + 365 >= windowStart  AND  shipDate <= windowEnd
+   *   => shipDate >= windowStart - 365  AND  shipDate <= windowEnd
+   */
+  function eligibleSales(salesF, lo, hi) {
+    if (!lo || !hi) return [];
+    var cutoff = addDays(lo, -FY);
+    return salesF.filter(function (s) {
+      return s.shippingDate >= cutoff && s.shippingDate <= hi;
+    });
+  }
+
+  /* ── KPIs ─────────────────────────────────────────────────── */
+  function calcKpis(claimsF, eligSales) {
+    var eligN = eligSales.length, claimN = 0, serials = new Set();
+    for (var j = 0; j < claimsF.length; j++) {
+      var c = claimsF[j], ship = S.shipMap.get(lk(c));
+      if (!ship) continue;
+      if (!isFY(ship.shippingDate, c.issueDate)) continue;
+      claimN++; serials.add(lk(c));
+    }
+    return {
+      eligible: eligN, claimCount: claimN, uniqueSerials: serials.size,
+      failRate: eligN ? claimN / eligN : 0,
+      warRate:  eligN ? serials.size / eligN : 0,
+    };
+  }
+  function kpiCls(r) { return r < .05 ? "good" : r < .1 ? "warn" : "bad"; }
+  function pct(r, n) { return n ? (100 * r).toFixed(2) + "%" : "\u2014"; }
+  function renderKpis(k, nMonths) {
+    var annFail = nMonths > 0 && k.eligible ? k.failRate * 12 / nMonths : 0;
+    document.getElementById("kpis").innerHTML =
+      '<div class="kpi ' + kpiCls(annFail) + '"><div class="label">Annualized failure rate</div><div class="value">' + pct(annFail, k.eligible) + '</div><div class="sub">Failure rate &times; 12 / ' + nMonths + ' months</div></div>' +
+      '<div class="kpi ' + kpiCls(k.failRate) + '"><div class="label">Failure rate in time range</div><div class="value">' + pct(k.failRate, k.eligible) + '</div><div class="sub">All 1st-yr claims / eligible units</div></div>' +
+      '<div class="kpi ' + kpiCls(k.warRate)  + '"><div class="label">Warranty rate in time range</div><div class="value">' + pct(k.warRate, k.eligible)  + '</div><div class="sub">Unique serials w/ claim / eligible</div></div>' +
+      '<div class="kpi"><div class="label">Eligible units</div><div class="value">' + k.eligible.toLocaleString() + '</div><div class="sub">Shipped w/ 1st-yr window overlapping issue range</div></div>' +
+      '<div class="kpi"><div class="label">First-year claims</div><div class="value">' + k.claimCount.toLocaleString() + '</div><div class="sub">Issue date in range &amp; within 365d of ship</div></div>' +
+      '<div class="kpi"><div class="label">Unique units w/ claim</div><div class="value">' + k.uniqueSerials.toLocaleString() + '</div><div class="sub">Distinct serial numbers</div></div>';
+  }
+
+  /* ── monthly failure rate data ────────────────────────────── */
+  function monthlyData(claimsF, salesF, f) {
+    var months = monthKeys(f.start, f.end);
+
+    // Per-month eligible: units whose 1st-year window [shipDate, shipDate+365]
+    // overlaps the issue month [firstDay(M), lastDay(M)]
+    // => shipDate >= firstDay(M) - 365  AND  shipDate <= lastDay(M)
+    var eligByMonth = {};
+    months.forEach(function (m) {
+      var lo = addDays(firstOfM(m), -FY);
+      var hi = lastOfM(m);
+      var n = 0;
+      for (var i = 0; i < salesF.length; i++) {
+        var sd = salesF[i].shippingDate;
+        if (sd >= lo && sd <= hi) n++;
+      }
+      eligByMonth[m] = n;
+    });
+
+    var counts = {};
+    for (var j = 0; j < claimsF.length; j++) {
+      var c = claimsF[j], ship = S.shipMap.get(lk(c));
+      if (!ship || !isFY(ship.shippingDate, c.issueDate)) continue;
+      var m = c.issueDate.slice(0, 7);
+      counts[m] = (counts[m] || 0) + 1;
+    }
+    return {
+      labels:    months,
+      rates:     months.map(function (m) { var e = eligByMonth[m]; return e ? 100 * (counts[m] || 0) / e : 0; }),
+      counts:    months.map(function (m) { return counts[m] || 0; }),
+      eligByMonth: eligByMonth,
+    };
+  }
+
+  /* ── chart rendering ──────────────────────────────────────── */
+  function destroyC(id) { if (S.charts[id]) { S.charts[id].destroy(); S.charts[id] = null; } }
+
+  function monthlyFailLineChart(id, labels, rates, eligByMonth, claimCounts) {
+    var FHS_RED = "#E03A3E", FHS_GOLD = "#FDB925", FHS_BLACK = "#231F20";
+    var FHS_AXIS = FHS_BLACK; /* Raisin: legible on white; gold kept for accents on dark tooltip only */
+    destroyC(id);
+    S.charts[id] = new Chart(document.getElementById(id).getContext("2d"), {
+      type: "line",
+      data: { labels: labels, datasets: [
+        { label:"Failure rate %", data:rates, borderColor:FHS_RED, backgroundColor:"rgba(224,58,62,.18)", pointBackgroundColor:FHS_RED, pointBorderColor:FHS_GOLD, pointBorderWidth:2, pointHoverBackgroundColor:FHS_GOLD, pointHoverBorderColor:FHS_RED, tension:.25, fill:true, borderWidth:2 },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{
+            backgroundColor:FHS_BLACK, titleColor:FHS_GOLD, bodyColor:"#f5f5f5", borderColor:FHS_RED, borderWidth:1,
+            callbacks:{ afterBody:function(items){ if (!items || !items.length) return []; var i = items[0].dataIndex, lbl = labels[i]; var e = eligByMonth[lbl] || 0, c = claimCounts[i] || 0; return ["Eligible units this month: "+e.toLocaleString(), "First-year claims this month: "+c.toLocaleString()]; } },
+          },
+        },
+        scales:{
+          x:{ ticks:{ color:FHS_AXIS, maxRotation:45 }, grid:{ color:"rgba(35,31,32,.08)" }, border:{ color:"rgba(35,31,32,.2)" } },
+          y:{ type:"linear", beginAtZero:true, title:{ display:true, text:"Failure rate %", color:FHS_AXIS }, ticks:{ color:FHS_AXIS, callback:function(v){return v+"%";} }, grid:{ color:"rgba(35,31,32,.12)" }, border:{ color:"rgba(224,58,62,.35)" } },
+        },
+      },
+    });
+  }
+
+  function refreshCharts(md) {
+    monthlyFailLineChart("chartMonthlyFail", md.labels, md.rates, md.eligByMonth, md.counts);
+  }
+
+  /** Per equipment (mfr|model): per issue month, eligible count and first-year claim count (portfolio chart logic, split by model). */
+  function buildMonthlyEquipmentPivot(claimsF, salesF, f, equipRowsOrdered) {
+    var months = monthKeys(f.start, f.end);
+    var monthSet = new Set(months);
+    var keySet = new Set();
+    equipRowsOrdered.forEach(function (r) { keySet.add(r.manufacturerFolder + "|" + r.model); });
+    var elig = {}, claimsBy = {};
+    function bump(o, k, ym, d) { if (!o[k]) o[k] = {}; o[k][ym] = (o[k][ym] || 0) + d; }
+
+    months.forEach(function (ym) {
+      var lo = addDays(firstOfM(ym), -FY);
+      var hi = lastOfM(ym);
+      for (var i = 0; i < salesF.length; i++) {
+        var s = salesF[i];
+        if (s.shippingDate < lo || s.shippingDate > hi) continue;
+        var k = s.manufacturerFolder + "|" + s.model;
+        if (!keySet.has(k)) continue;
+        bump(elig, k, ym, 1);
+      }
+    });
+    for (var j = 0; j < claimsF.length; j++) {
+      var c = claimsF[j];
+      var ym = c.issueDate.slice(0, 7);
+      if (!monthSet.has(ym)) continue;
+      var ship = S.shipMap.get(lk(c));
+      if (!ship || !isFY(ship.shippingDate, c.issueDate)) continue;
+      var k = ship.manufacturerFolder + "|" + ship.model;
+      if (!keySet.has(k)) continue;
+      bump(claimsBy, k, ym, 1);
+    }
+    return { months: months, equipRows: equipRowsOrdered, elig: elig, claimsBy: claimsBy };
+  }
+
+  function renderMonthlyPivotTable(pivot) {
+    var months = pivot.months;
+    var equipRows = pivot.equipRows;
+    var eligM = pivot.elig;
+    var claimsM = pivot.claimsBy;
+    var thead = document.getElementById("tblMonthlyRatesHead");
+    var hr = "<tr><th>Model</th><th>Mfr</th>";
+    for (var h = 0; h < months.length; h++) {
+      hr += '<th class="num month-col" title="Issue month: ' + esc(months[h]) + '">' + esc(formatIssueMonth(months[h])) + "</th>";
+    }
+    hr += "</tr>";
+    thead.innerHTML = hr;
+
+    var tbody = document.getElementById("tblMonthlyRatesBody");
+    tbody.innerHTML = "";
+    for (var r = 0; r < equipRows.length; r++) {
+      var er = equipRows[r];
+      var k = er.manufacturerFolder + "|" + er.model;
+      var tr = document.createElement("tr");
+      var html = "<td>" + esc(er.model) + "</td><td>" + esc(er.manufacturerFolder) + "</td>";
+      for (var m = 0; m < months.length; m++) {
+        var ym = months[m];
+        var e = (eligM[k] && eligM[k][ym]) || 0;
+        var cl = (claimsM[k] && claimsM[k][ym]) || 0;
+        var ratePct = e ? (100 * cl / e) : null;
+        var cls = "num";
+        if (ratePct != null) {
+          if (ratePct >= 2) cls += " rate-bad";
+          else if (ratePct >= 1) cls += " rate-warn";
+        }
+        html += '<td class="' + cls + '">' + (e ? ratePct.toFixed(2) + "%" : "\u2014") + "</td>";
+      }
+      tr.innerHTML = html;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function syncEquipAndMonthlyPivotFrom(claimsF, salesF, f, eligSales, nMonths) {
+    var equip = buildEquipRows(claimsF, eligSales);
+    renderEquipTable(equip, nMonths);
+    renderMonthlyPivotTable(buildMonthlyEquipmentPivot(claimsF, salesF, f, sortR(equip, S.equipSort)));
+  }
+
+  /* ── equipment summary ────────────────────────────────────── */
+  function buildEquipRows(claimsF, eligSales) {
+    var byModel = new Map();
+    for (var i = 0; i < eligSales.length; i++) {
+      var s = eligSales[i], k = s.manufacturerFolder + "|" + s.model;
+      if (!byModel.has(k)) byModel.set(k, { mf: s.manufacturerFolder, model: s.model, eligible: 0, claims: 0, serials: new Set(), issues: {} });
+      byModel.get(k).eligible++;
+    }
+    for (var j = 0; j < claimsF.length; j++) {
+      var c = claimsF[j], ship = S.shipMap.get(lk(c));
+      if (!ship) continue;
+      if (!isFY(ship.shippingDate, c.issueDate)) continue;
+      var ck = ship.manufacturerFolder + "|" + ship.model;
+      if (!byModel.has(ck)) continue;
+      var r = byModel.get(ck);
+      r.claims++; r.serials.add(lk(c));
+      var iss = (c.issue && c.issue.trim()) || "(blank)";
+      r.issues[iss] = (r.issues[iss] || 0) + 1;
+    }
+    var out = [];
+    byModel.forEach(function (v) {
+      var top = "", tn = 0;
+      Object.keys(v.issues).forEach(function (k) { if (v.issues[k] > tn) { tn = v.issues[k]; top = k; } });
+      out.push({ manufacturerFolder: v.mf, model: v.model, eligible: v.eligible, claims: v.claims,
+        failRate: v.eligible ? v.claims / v.eligible : 0,
+        warRate:  v.eligible ? v.serials.size / v.eligible : 0,
+        topIssue: top, issues: v.issues });
+    });
+    return out;
+  }
+
+  /* ── annual breakdown (single year) ──────────────────────── */
+  function buildAnnualRows(yr) {
+    var lo = yr + "-01-01", hi = yr + "-12-31";
+    var cutoff = addDays(lo, -FY);
+    var byModel = {};
+    S.sales.forEach(function (s) {
+      if (s.shippingDate < cutoff || s.shippingDate > hi) return;
+      var k = s.manufacturerFolder + "|" + s.model;
+      if (!byModel[k]) byModel[k] = { mf: s.manufacturerFolder, model: s.model, n: 0, claims: 0, serials: new Set(), issues: {} };
+      byModel[k].n++;
+    });
+    S.claims.forEach(function (c) {
+      if (c.issueDate < lo || c.issueDate > hi) return;
+      var ship = S.shipMap.get(lk(c));
+      if (!ship || !isFY(ship.shippingDate, c.issueDate)) return;
+      var k = ship.manufacturerFolder + "|" + ship.model;
+      if (!byModel[k]) return;
+      var r = byModel[k];
+      r.claims++; r.serials.add(lk(c));
+      var iss = (c.issue && c.issue.trim()) || "(blank)";
+      r.issues[iss] = (r.issues[iss] || 0) + 1;
+    });
+    var rows = [];
+    Object.keys(byModel).forEach(function (k) {
+      var v = byModel[k]; if (!v.n) return;
+      var top = "", tn = 0;
+      Object.keys(v.issues).forEach(function (i) { if (v.issues[i] > tn) { tn = v.issues[i]; top = i; } });
+      rows.push({ manufacturerFolder: v.mf, model: v.model, eligible: v.n,
+        claims: v.claims, uniqueSerials: v.serials.size,
+        failRate: v.n ? v.claims / v.n : 0,
+        warRate:  v.n ? v.serials.size / v.n : 0,
+        topIssue: top });
+    });
+    return rows;
+  }
+
+  function getAvailableYears() {
+    var yrs = new Set();
+    S.claims.forEach(function (c) { yrs.add(c.issueDate.slice(0, 4)); });
+    S.sales.forEach(function (s) { yrs.add(s.shippingDate.slice(0, 4)); });
+    return Array.from(yrs).sort();
+  }
+
+  function getDefaultAnnualYear() {
+    var mx = "";
+    S.claims.forEach(function (c) { if (c.issueDate > mx) mx = c.issueDate; });
+    if (!mx) return String(new Date().getUTCFullYear() - 1);
+    var latestYear = parseInt(mx.slice(0, 4), 10);
+    return String(latestYear - 1);
+  }
+
+  /* ── table rendering helpers ──────────────────────────────── */
+  function esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function sortR(rows, sort) {
+    return rows.slice().sort(function (a, b) {
+      var va = a[sort.key], vb = b[sort.key];
+      if (va === vb) return 0;
+      if (typeof va === "number" && typeof vb === "number") return va < vb ? -sort.dir : sort.dir;
+      return String(va) < String(vb) ? -sort.dir : sort.dir;
+    });
+  }
+  function wireSort(tid, sortObj, fn) {
+    document.querySelectorAll("#" + tid + " thead [data-sort]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var k = th.getAttribute("data-sort");
+        if (sortObj.key === k) sortObj.dir *= -1;
+        else { sortObj.key = k; sortObj.dir = (k === "failRate" || k === "annualizedFailRate" || k === "warRate" || k === "issueDate" || k === "days") ? -1 : 1; }
+        fn();
+      });
+    });
+  }
+
+  function countMonthsInRange(f) {
+    if (!f.start || !f.end) return 12;
+    var sp = f.start.split("-").map(Number), ep = f.end.split("-").map(Number);
+    return (ep[0] - sp[0]) * 12 + (ep[1] - sp[1]) + 1;
+  }
+
+  function renderEquipTable(rows, nMonths) {
+    rows.forEach(function (r) {
+      r.annualizedFailRate = nMonths > 0 && r.eligible ? r.failRate * 12 / nMonths : 0;
+    });
+    var tbody = document.getElementById("tblEquipBody");
+    tbody.innerHTML = "";
+    sortR(rows, S.equipSort).forEach(function (r) {
+      var mk = r.manufacturerFolder + "|" + r.model;
+      var tr = document.createElement("tr");
+      var cls = "";
+      if (r.eligible > 0) {
+        if (r.failRate >= .1) cls = "bad-row";
+        else if (r.failRate >= .06) cls = "warn-row";
+      }
+      tr.className = cls;
+      tr.innerHTML =
+        "<td>" + esc(r.model) + "</td><td>" + esc(r.manufacturerFolder) + '</td>' +
+        '<td class="num">' + r.eligible.toLocaleString() + '</td><td class="num">' + r.claims.toLocaleString() + "</td>" +
+        '<td class="num">' + (r.eligible ? (100 * r.annualizedFailRate).toFixed(2) + "%" : "\u2014") + "</td>" +
+        '<td class="num">' + (r.eligible ? (100 * r.failRate).toFixed(2) + "%" : "\u2014") + "</td>" +
+        '<td class="num">' + (r.eligible ? (100 * r.warRate).toFixed(2) + "%" : "\u2014") + "</td>" +
+        "<td>" + esc(r.topIssue) + "</td>";
+      tr.dataset.key = mk; tr.style.cursor = "pointer";
+      tr.addEventListener("click", function () {
+        S.expandedModel = S.expandedModel === mk ? null : mk;
+        renderEquipTable(rows, nMonths);
+      });
+      tbody.appendChild(tr);
+      if (S.expandedModel === mk) {
+        var sub = document.createElement("tr"); sub.className = "sub";
+        var sorted = Object.keys(r.issues).sort(function (a, b) { return r.issues[b] - r.issues[a]; });
+        sub.innerHTML = '<td colspan="8">' + (sorted.slice(0, 15).map(function (k) { return esc(k) + " (" + r.issues[k] + ")"; }).join(" &middot; ") || "No issues") + "</td>";
+        tbody.appendChild(sub);
+      }
+    });
+  }
+
+  function renderAnnualTable(rows) {
+    var tbody = document.getElementById("tblAnnualBody");
+    tbody.innerHTML = "";
+    sortR(rows, S.annualSort).forEach(function (r) {
+      var tr = document.createElement("tr");
+      var cls = "";
+      if (r.eligible > 0) {
+        if (r.failRate >= .1) cls = "bad-row";
+        else if (r.failRate >= .06) cls = "warn-row";
+      }
+      tr.className = cls;
+      tr.innerHTML =
+        "<td>" + esc(r.model) + "</td><td>" + esc(r.manufacturerFolder) + "</td>" +
+        '<td class="num">' + r.eligible.toLocaleString() + '</td><td class="num">' + r.claims.toLocaleString() +
+        '</td><td class="num">' + r.uniqueSerials.toLocaleString() + "</td>" +
+        '<td class="num">' + (r.eligible ? (100 * r.failRate).toFixed(2) + "%" : "\u2014") + "</td>" +
+        '<td class="num">' + (r.eligible ? (100 * r.warRate).toFixed(2) + "%" : "\u2014") + "</td>" +
+        "<td>" + esc(r.topIssue) + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  function refreshAnnualTable() {
+    var yr = document.getElementById("annualYear").value;
+    renderAnnualTable(buildAnnualRows(yr));
+  }
+
+  /* ── claims detail table ──────────────────────────────────── */
+  function buildClaimRows(claimsF) {
+    return claimsF.map(function (c) {
+      var ship = S.shipMap.get(lk(c));
+      var sd = ship ? ship.shippingDate : null;
+      var fy = sd ? isFY(sd, c.issueDate) : false;
+      return {
+        serialNumber: c.serialNumber, model: c.model, manufacturerFolder: c.manufacturerFolder,
+        region: c.region, shippingDate: sd || "", issueDate: c.issueDate,
+        days: sd ? daysBetween(sd, c.issueDate) : null,
+        firstYear: fy ? "Yes" : "No",
+        issue: c.issue || "", partReplaced: c.partReplaced || "",
+      };
+    });
+  }
+  function renderClaimsTable(rows) {
+    var q = document.getElementById("claimSearch").value.trim().toLowerCase();
+    var filtered = q ? rows.filter(function (r) {
+      return (r.serialNumber + " " + r.model + " " + r.issue + " " + r.partReplaced).toLowerCase().indexOf(q) !== -1;
+    }) : rows;
+    var tbody = document.getElementById("tblClaimsBody");
+    tbody.innerHTML = "";
+    sortR(filtered, S.claimsSort).forEach(function (r) {
+      var tr = document.createElement("tr");
+      if (r.firstYear === "Yes") tr.className = "row-firstyear";
+      tr.innerHTML =
+        "<td>" + esc(r.serialNumber) + "</td><td>" + esc(r.model) + "</td><td>" + esc(r.manufacturerFolder) +
+        "</td><td>" + esc(r.region) + "</td><td>" + esc(r.shippingDate) + "</td><td>" + esc(r.issueDate) +
+        '</td><td class="num">' + (r.days != null ? r.days : "\u2014") + "</td><td>" + r.firstYear +
+        "</td><td>" + esc(r.issue) + "</td><td>" + esc(r.partReplaced) + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ── default range: trailing 12 months ending at latest claim month ── */
+  function defaultRange() {
+    var mx = "";
+    S.claims.forEach(function (c) { if (c.issueDate > mx) mx = c.issueDate; });
+    if (!mx) return { start: "", end: "" };
+    var d = parseYMD(mx), y = d.getUTCFullYear(), m = d.getUTCMonth(); // 0-based
+    var sm = m - 11, sy = y;
+    while (sm < 0) { sm += 12; sy--; }
+    return { start: sy + "-" + String(sm + 1).padStart(2, "0"), end: y + "-" + String(m + 1).padStart(2, "0") };
+  }
+
+  /* ── master refresh ───────────────────────────────────────── */
+  function refresh() {
+    var f = getF();
+    var lo = f.start ? firstOfM(f.start) : null;
+    var hi = f.end   ? lastOfM(f.end) : null;
+    var claimsF  = fltClaims(S.claims, f);
+    var salesF   = fltSales(S.sales, f);
+    var eligSales = eligibleSales(salesF, lo, hi);
+
+    var nMonths = countMonthsInRange(f);
+    renderKpis(calcKpis(claimsF, eligSales), nMonths);
+    var md = monthlyData(claimsF, salesF, f);
+    refreshCharts(md);
+
+    syncEquipAndMonthlyPivotFrom(claimsF, salesF, f, eligSales, nMonths);
+
+    S.claimRows = buildClaimRows(claimsF);
+    renderClaimsTable(S.claimRows);
+  }
+
+  /* ── init ──────────────────────────────────────────────────── */
+  function populateFilters() {
+    var mfrSet = new Set(), modelMap = new Map();
+    S.sales.forEach(function (s) {
+      mfrSet.add(s.manufacturerFolder);
+      if (!modelMap.has(s.manufacturerFolder)) modelMap.set(s.manufacturerFolder, new Set());
+      modelMap.get(s.manufacturerFolder).add(s.model);
+    });
+    var mfrSel = document.getElementById("fltMfr"); mfrSel.innerHTML = "";
+    Array.from(mfrSet).sort().forEach(function (m) {
+      var o = document.createElement("option"); o.value = m; o.textContent = m; o.selected = true; mfrSel.appendChild(o);
+    });
+    function refill() {
+      var chosen = selVals(mfrSel), ms = document.getElementById("fltModel"), set = new Set(); ms.innerHTML = "";
+      chosen.forEach(function (mf) { (modelMap.get(mf) || new Set()).forEach(function (mod) { set.add(mod); }); });
+      Array.from(set).sort().forEach(function (mod) {
+        var o = document.createElement("option"); o.value = mod; o.textContent = mod; o.selected = true; ms.appendChild(o);
+      });
+    }
+    mfrSel.addEventListener("change", refill); refill();
+    var regSel = document.getElementById("fltRegion"); regSel.innerHTML = "";
+    ["NA", "LAC", "EMEA", "APAC"].forEach(function (r) {
+      var o = document.createElement("option"); o.value = r; o.textContent = r; o.selected = true; regSel.appendChild(o);
+    });
+  }
+  function setDefaults() {
+    var d = defaultRange();
+    document.getElementById("fltStart").value = d.start;
+    document.getElementById("fltEnd").value = d.end;
+  }
+
+  (function init() {
+    var banner = document.getElementById("errBanner");
+    if (typeof window.DASHBOARD_DATA === "undefined" || !window.DASHBOARD_DATA.sales) {
+      banner.textContent = "dashboard_data.js not found. Run python process_data.py first.";
+      banner.classList.add("show"); return;
+    }
+    var raw = window.DASHBOARD_DATA;
+    S.sales = raw.sales || []; S.claims = raw.claims || [];
+    S.shipMap = new Map();
+    S.sales.forEach(function (s) { S.shipMap.set(lk(s), s); });
+    var mx = "1970-01-01";
+    S.sales.forEach(function (s)  { if (s.shippingDate > mx) mx = s.shippingDate; });
+    S.claims.forEach(function (c) { if (c.issueDate > mx) mx = c.issueDate; });
+    S.dataAsOf = mx;
+
+    populateFilters(); setDefaults();
+    document.getElementById("metaFoot").textContent =
+      "Data generated: " + (raw.generatedAt || "unknown") + " \u00B7 Latest date in data: " + S.dataAsOf;
+    document.getElementById("btnApply").addEventListener("click", refresh);
+    document.getElementById("btnReset").addEventListener("click", function () {
+      Array.from(document.getElementById("fltMfr").options).forEach(function (o) { o.selected = true; });
+      document.getElementById("fltMfr").dispatchEvent(new Event("change"));
+      Array.from(document.getElementById("fltModel").options).forEach(function (o) { o.selected = true; });
+      Array.from(document.getElementById("fltRegion").options).forEach(function (o) { o.selected = true; });
+      setDefaults(); S.expandedModel = null; refresh();
+    });
+    document.getElementById("claimSearch").addEventListener("input", function () { renderClaimsTable(S.claimRows); });
+    wireSort("tblEquip", S.equipSort, function () {
+      var f = getF(), lo = f.start ? firstOfM(f.start) : null, hi = f.end ? lastOfM(f.end) : null;
+      var claimsF = fltClaims(S.claims, f);
+      var salesF = fltSales(S.sales, f);
+      syncEquipAndMonthlyPivotFrom(claimsF, salesF, f, eligibleSales(salesF, lo, hi), countMonthsInRange(f));
+    });
+    wireSort("tblAnnual", S.annualSort, refreshAnnualTable);
+    wireSort("tblClaims", S.claimsSort, function () { renderClaimsTable(S.claimRows); });
+
+    var yearSel = document.getElementById("annualYear");
+    var years = getAvailableYears();
+    var defYear = getDefaultAnnualYear();
+    years.forEach(function (yr) {
+      var o = document.createElement("option");
+      o.value = yr; o.textContent = yr;
+      if (yr === defYear) o.selected = true;
+      yearSel.appendChild(o);
+    });
+    yearSel.addEventListener("change", refreshAnnualTable);
+    refreshAnnualTable();
+    refresh();
+  })();
+})();
+  </script>
+</body>
+</html>
